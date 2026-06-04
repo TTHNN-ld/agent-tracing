@@ -1,44 +1,21 @@
-# OpenCode Langfuse 插件
+# OpenCode Langfuse Plugin
 
-这是一个可用 `opencode plugin` 安装的 OpenCode package 插件。
+OpenCode plugin that records turns, model calls, and tool calls to Langfuse through the local OpenTelemetry Collector.
 
-## 安装
+## Install
 
-项目级安装：
-
-```bash
-opencode plugin /Users/ld/work/ziguang/workCode/study/agent-cli/plugin/langfuse/opencode-langfuse
+```sh
+opencode plugin -g /opt/agent-tracing/langfuse/opencode-langfuse
 ```
 
-用户全局安装：
+The all-user profile `setup-langfuse.sh` installs this automatically for interactive shell users when `opencode` is available.
 
-```bash
-opencode plugin -g /Users/ld/work/ziguang/workCode/study/agent-cli/plugin/langfuse/opencode-langfuse
+## Runtime
+
+The plugin sends OTLP/HTTP traces to:
+
+```sh
+LANGFUSE_OTEL_ENDPOINT_OPENCODE=http://127.0.0.1:4318
 ```
 
-替换已有配置：
-
-```bash
-opencode plugin -f /Users/ld/work/ziguang/workCode/study/agent-cli/plugin/langfuse/opencode-langfuse
-```
-
-## 配置
-
-```bash
-export LANGFUSE_PUBLIC_KEY_OPENCODE=pk-lf-...
-export LANGFUSE_SECRET_KEY_OPENCODE=sk-lf-...
-export LANGFUSE_BASE_URL_OPENCODE=https://cloud.langfuse.com
-```
-
-可选：
-
-```bash
-export LANGFUSE_ENVIRONMENT=production
-export LANGFUSE_USER_ID="$USER"
-export LANGFUSE_USER_NAME="Your Name"
-export LANGFUSE_TEAM="agent-team"
-export LANGFUSE_MAX_IO_CHARS=20000
-export LANGFUSE_FLUSH_INTERVAL_MS=1000
-```
-
-缺少 `LANGFUSE_PUBLIC_KEY_OPENCODE` 或 `LANGFUSE_SECRET_KEY_OPENCODE` 时，插件会禁用追踪。
+The Collector routes by `agent.name=opencode` to the OpenCode Langfuse project.

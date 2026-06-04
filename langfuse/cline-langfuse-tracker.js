@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
+import { otlpPayloadFromEvents, postOtlp } from "./scripts/otel-utils.mjs"
 
 const MAX_IO_CHARS = Number(process.env.LANGFUSE_MAX_IO_CHARS ?? 20000)
 const FLUSH_INTERVAL_MS = Number(process.env.LANGFUSE_FLUSH_INTERVAL_MS ?? 1000)
@@ -20,9 +21,6 @@ function stableID(...parts) {
 	return hash(parts.join(":"))
 }
 
-function authHeader(publicKey, secretKey) {
-	return `Basic ${Buffer.from(`${publicKey}:${secretKey}`).toString("base64")}`
-}
 
 function userID() {
 	return process.env.LANGFUSE_USER_ID ?? process.env.USER ?? "unknown"
@@ -136,7 +134,7 @@ function traceName(text) {
 		.replace(/\s+/g, " ")
 		.trim()
 		.slice(0, 80)
-	return first ? `cline.run: ${first}` : "cline.run"
+	return first ? `cline.turn: ${first}` : "cline.turn"
 }
 
 function usageFromMetrics(metrics) {
@@ -187,13 +185,14 @@ function createLangfuseClient(ctx) {
 		process.env.LANGFUSE_BASE_URL_CLINE ??
 		process.env.LANGFUSE_HOST_CLINE ??
 		"https://cloud.langfuse.com"
+	const endpoint = process.env.LANGFUSE_OTEL_ENDPOINT_CLINE ?? process.env.LANGFUSE_OTEL_ENDPOINT ?? "http://127.0.0.1:4318"
+	const timeoutMs = Number(process.env.LANGFUSE_OTEL_TIMEOUT_MS ?? 200)
 
 	if (!publicKey || !secretKey) {
 		log.warn("Missing LANGFUSE_PUBLIC_KEY_CLINE or LANGFUSE_SECRET_KEY_CLINE - tracing disabled")
 		return undefined
 	}
 
-	const endpoint = `${baseUrl.replace(/\/$/, "")}/api/public/ingestion`
 	const queue = []
 	let timer
 	let flushing = false
@@ -216,20 +215,17 @@ function createLangfuseClient(ctx) {
 		flushing = true
 		const batch = queue.splice(0, queue.length)
 		try {
-			const response = await fetch(endpoint, {
-				method: "POST",
-				headers: {
-					authorization: authHeader(publicKey, secretKey),
-					"content-type": "application/json",
-				},
-				body: JSON.stringify({ batch }),
+			const payload = otlpPayloadFromEvents(batch, {
+				agent: "cline",
+				serviceName: "agent-langfuse-cline",
 			})
-			if (!response.ok && response.status !== 207) {
-				log.warn(`Langfuse ingestion returned ${response.status}: ${await response.text()}`)
+			const ok = await postOtlp(payload, endpoint, timeoutMs)
+			if (!ok) {
+				log.warn(`Langfuse OTLP export failed: ${endpoint}`)
 			}
 		} catch (error) {
 			queue.unshift(...batch)
-			log.warn(`Langfuse ingestion failed: ${error instanceof Error ? error.message : String(error)}`)
+			log.warn(`Langfuse OTLP export failed: ${error instanceof Error ? error.message : String(error)}`)
 		} finally {
 			flushing = false
 			if (queue.length) schedule()
@@ -267,7 +263,7 @@ function createRunTracker(ctx, client) {
 		client.push("trace-create", {
 			id: traceID,
 			timestamp: iso(run.startTime),
-			name: "cline.run",
+			name: "cline.turn",
 			userId: user?.id ?? userID(),
 			sessionId: snapshot?.conversationId ?? key,
 			metadata: {

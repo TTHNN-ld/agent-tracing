@@ -124,7 +124,7 @@ function otelEndpoint() {
   return (
     process.env[`LANGFUSE_OTEL_ENDPOINT_${ENV_PREFIX}`] ??
     process.env.LANGFUSE_OTEL_ENDPOINT ??
-    (ENV_PREFIX === "CLAUDECODE" ? "http://127.0.0.1:4318" : "http://127.0.0.1:4319")
+    (ENV_PREFIX === "CLAUDECODE" ? "http://127.0.0.1:4318" : "http://127.0.0.1:4318")
   );
 }
 

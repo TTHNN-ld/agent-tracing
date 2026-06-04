@@ -1,0 +1,107 @@
+receivers:
+  otlp/agents:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+
+  batch:
+    timeout: 2s
+    send_batch_size: 256
+    send_batch_max_size: 512
+
+  filter/claudecode:
+    error_mode: ignore
+    traces:
+      span:
+        - resource.attributes["agent.name"] != "claudecode"
+
+  filter/codex:
+    error_mode: ignore
+    traces:
+      span:
+        - resource.attributes["agent.name"] != "codex"
+
+  filter/opencode:
+    error_mode: ignore
+    traces:
+      span:
+        - resource.attributes["agent.name"] != "opencode"
+
+  filter/pi:
+    error_mode: ignore
+    traces:
+      span:
+        - resource.attributes["agent.name"] != "pi"
+
+  filter/cline:
+    error_mode: ignore
+    traces:
+      span:
+        - resource.attributes["agent.name"] != "cline"
+
+exporters:
+  otlp_http/langfuse_claudecode:
+    endpoint: ${env:LANGFUSE_OTEL_EXPORTER_ENDPOINT_CLAUDECODE}
+    headers:
+      Authorization: ${env:LANGFUSE_AUTH_HEADER_CLAUDECODE}
+      x-langfuse-ingestion-version: "4"
+
+  otlp_http/langfuse_codex:
+    endpoint: ${env:LANGFUSE_OTEL_EXPORTER_ENDPOINT_CODEX}
+    headers:
+      Authorization: ${env:LANGFUSE_AUTH_HEADER_CODEX}
+      x-langfuse-ingestion-version: "4"
+
+  otlp_http/langfuse_opencode:
+    endpoint: ${env:LANGFUSE_OTEL_EXPORTER_ENDPOINT_OPENCODE}
+    headers:
+      Authorization: ${env:LANGFUSE_AUTH_HEADER_OPENCODE}
+      x-langfuse-ingestion-version: "4"
+
+  otlp_http/langfuse_pi:
+    endpoint: ${env:LANGFUSE_OTEL_EXPORTER_ENDPOINT_PI}
+    headers:
+      Authorization: ${env:LANGFUSE_AUTH_HEADER_PI}
+      x-langfuse-ingestion-version: "4"
+
+  otlp_http/langfuse_cline:
+    endpoint: ${env:LANGFUSE_OTEL_EXPORTER_ENDPOINT_CLINE}
+    headers:
+      Authorization: ${env:LANGFUSE_AUTH_HEADER_CLINE}
+      x-langfuse-ingestion-version: "4"
+
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces/claudecode:
+      receivers: [otlp/agents]
+      processors: [memory_limiter, filter/claudecode, batch]
+      exporters: [otlp_http/langfuse_claudecode, debug]
+
+    traces/codex:
+      receivers: [otlp/agents]
+      processors: [memory_limiter, filter/codex, batch]
+      exporters: [otlp_http/langfuse_codex, debug]
+
+    traces/opencode:
+      receivers: [otlp/agents]
+      processors: [memory_limiter, filter/opencode, batch]
+      exporters: [otlp_http/langfuse_opencode, debug]
+
+    traces/pi:
+      receivers: [otlp/agents]
+      processors: [memory_limiter, filter/pi, batch]
+      exporters: [otlp_http/langfuse_pi, debug]
+
+    traces/cline:
+      receivers: [otlp/agents]
+      processors: [memory_limiter, filter/cline, batch]
+      exporters: [otlp_http/langfuse_cline, debug]

@@ -1,400 +1,253 @@
-# Pi / OpenCode / Cline / Claude Code / Codex 接入 Langfuse
+# Agent Tracing Langfuse 集成
 
-本目录包含多个 agent 的 Langfuse 追踪集成：
+`langfuse/` 为多个编码智能体（coding agent）提供公司级统一的追踪能力，所有遥测数据通过单一的本地 OpenTelemetry Collector 入口进行路由。
+
+支持的智能体：
+
+- Claude Code
+- Codex
+- OpenCode
+- Pi
+- Cline
+
+## 记录内容
+
+所有集成使用统一的 Langfuse 观测命名模型：
+
+- 轮次追踪：`<agent>.turn`，例如 `codex.turn` 或 `claudecode.turn`
+- 模型调用：`llm.call`，对应 Langfuse `GENERATION`
+- 工具调用：`tool.<toolName>`，对应 Langfuse `SPAN`
+
+每条追踪包含脱敏后的输入/输出以及元数据，如用户、工作目录、模型、会话 ID、追踪来源，以及智能体暴露的对话记录路径。
+
+超长输入/输出值会按 `LANGFUSE_MAX_IO_CHARS` 截断。匹配常见密钥模式的字段在上传前会被脱敏处理。
+
+## 架构
 
 ```text
-plugin/langfuse/
+智能体钩子/插件
+  -> OTLP/HTTP localhost:4318/v1/traces
+  -> OpenTelemetry Collector
+  -> 按 resource.attributes["agent.name"] 过滤
+  -> 路由至对应智能体的 Langfuse 项目导出器
+  -> Langfuse /api/public/otel
+```
+
+所有智能体共用同一个本地 Collector 接收端口：
+
+```text
+127.0.0.1:4318
+```
+
+Collector 通过 `agent.name` 路由来保证项目隔离：
+
+| 智能体 | `agent.name` | Langfuse 项目凭证 |
+| --- | --- | --- |
+| Claude Code | `claudecode` | `LANGFUSE_AUTH_HEADER_CLAUDECODE` |
+| Codex | `codex` | `LANGFUSE_AUTH_HEADER_CODEX` |
+| OpenCode | `opencode` | `LANGFUSE_AUTH_HEADER_OPENCODE` |
+| Pi | `pi` | `LANGFUSE_AUTH_HEADER_PI` |
+| Cline | `cline` | `LANGFUSE_AUTH_HEADER_CLINE` |
+
+## 技术栈
+
+- Node.js ESM 钩子脚本（适配 Claude Code、Codex、OpenCode、Cline）
+- TypeScript Pi 扩展包
+- 基于 HTTP 的 OpenTelemetry Protocol（`/v1/traces`）
+- OpenTelemetry Collector `filter` 处理器实现按智能体路由
+- Langfuse OTLP 接入端点（`/api/public/otel`）
+- Shell profile 引导脚本，实现全用户插件自动安装
+- Docker / Docker Compose 生产环境 Collector 部署
+
+## 目录结构
+
+```text
+langfuse/
   README.md
-  marketplace.json                 # Codex local marketplace
-  .claude-plugin/marketplace.json  # Claude Code local marketplace
-  pi-langfuse/                    # Pi package，可用 pi install 安装
-  opencode-langfuse/              # OpenCode package，可用 opencode plugin 安装
-  codex-langfuse/                  # Codex plugin package
-  claude-code-langfuse/            # Claude Code plugin package
-  pi-langfuse-tracker.ts           # Pi tracker 源文件
-  opencode-langfuse-tracker.js     # OpenCode plugin
-  cline-langfuse-tracker.js        # Cline plugin
+  setup-langfuse.sh                    # 生产环境 profile，适用于 /etc/profile.d
+  setup-langfuse-profile-local.sh      # 本地开发 profile
+  .env.example                         # 生产环境 Collector 环境变量模板
+  scripts/otel-utils.mjs               # 共享 OTLP 转换工具
+  otel-collector/
+    collector-single-port.docker.yaml  # 单端口 Collector 配置
+    docker-compose.single-port.yaml    # 生产环境 Docker Compose 模板
+    README.md
+  claude-code-langfuse/                # Claude Code 插件包
+  codex-langfuse/                      # Codex 插件包及通知包装器
+  opencode-langfuse/                   # OpenCode 插件包
+  pi-langfuse/                         # Pi 扩展包
+  cline-langfuse-tracker.js            # Cline 插件入口
 ```
 
-## 通用配置
+## 生产环境部署
 
-所有 tracker 都会记录：
+生产部署使用一份配置文件和一个部署脚本：
 
-- 每次 agent turn/run 的 Langfuse trace。
-- 每次模型调用的 `llm.call` generation。
-- 每次工具调用和结果的 `tool.*` span。
-- 用户、环境、agent session 等 metadata。
-- 脱敏后的输入/输出，大字段会按 `LANGFUSE_MAX_IO_CHARS` 截断。
-
-通用可选变量：
-
-```bash
-export LANGFUSE_ENVIRONMENT=production
-export LANGFUSE_USER_ID="$USER"
-export LANGFUSE_USER_NAME="Your Name"
-export LANGFUSE_TEAM="agent-team"
-export LANGFUSE_MAX_IO_CHARS=20000
-export LANGFUSE_FLUSH_INTERVAL_MS=1000
+```sh
+cd /opt/agent-tracing/langfuse
+cp .env.example .env
+vim .env
+sudo ./deploy.sh
 ```
 
-## Pi
+`deploy.sh` 会完成端到端部署：
 
-Pi 使用 installable package。本目录下的 `pi-langfuse/` 已经打包成 Pi package。
+- 从 `.env` 读取 `LANGFUSE_PUBLIC_KEY_*` 和 `LANGFUSE_SECRET_KEY_*`
+- 自动生成 Collector 专用的 Basic Auth header 到 `otel-collector/.env.generated`
+- 校验 `collector-single-port.docker.yaml`
+- 启动或重建 `agent-langfuse-otelcol` 容器
+- 检查容器是否运行并暴露 `4318`
+- 安装 `/etc/profile.d/agent-langfuse.sh`，让交互式 shell 用户自动安装/修复插件
 
-### 安装
+### 1. 克隆或更新仓库
 
-项目级安装，写入当前项目的 `.pi/settings.json`：
-
-```bash
-pi install -l /path/to/plugin/langfuse/pi-langfuse
+```sh
+sudo mkdir -p /opt/agent-tracing
+sudo chown "$USER":"$USER" /opt/agent-tracing
+git clone https://github.com/TTHNN-ld/agent-tracing.git /opt/agent-tracing
 ```
 
-用户全局安装，写入当前用户的 `~/.pi/agent/settings.json`：
+已有 checkout 时：
 
-```bash
-pi install /path/to/plugin/langfuse/pi-langfuse
+```sh
+cd /opt/agent-tracing
+git pull --ff-only
 ```
 
-如果在本仓库源码里的 `pi/` 目录测试：
+### 2. 配置 `.env`
 
-```bash
-cd /Users/ld/work/ziguang/workCode/study/agent-cli/pi
-./pi-test.sh install -l ../plugin/langfuse/pi-langfuse
+```sh
+cd /opt/agent-tracing/langfuse
+cp .env.example .env
+vim .env
 ```
 
-### Langfuse 环境变量
+.env 配置 Langfuse 项目凭证：
 
-```bash
-export LANGFUSE_PUBLIC_KEY_PI=pk-lf-...
-export LANGFUSE_SECRET_KEY_PI=sk-lf-...
-export LANGFUSE_BASE_URL_PI=https://cloud.langfuse.com
+```sh
+LANGFUSE_PUBLIC_KEY_OPENCODE=pk-lf-...
+LANGFUSE_SECRET_KEY_OPENCODE=sk-lf-...
+LANGFUSE_PUBLIC_KEY_PI=pk-lf-...
+LANGFUSE_SECRET_KEY_PI=sk-lf-...
+LANGFUSE_PUBLIC_KEY_CLINE=pk-lf-...
+LANGFUSE_SECRET_KEY_CLINE=sk-lf-...
+LANGFUSE_PUBLIC_KEY_CLAUDECODE=pk-lf-...
+LANGFUSE_SECRET_KEY_CLAUDECODE=sk-lf-...
+LANGFUSE_PUBLIC_KEY_CODEX=pk-lf-...
+LANGFUSE_SECRET_KEY_CODEX=sk-lf-...
 ```
 
-Pi tracker 也会回退读取通用变量：
+.env 同时配置两个 URL：
 
-```bash
-export LANGFUSE_PUBLIC_KEY=pk-lf-...
-export LANGFUSE_SECRET_KEY=sk-lf-...
-export LANGFUSE_BASE_URL=https://cloud.langfuse.com
+```sh
+# agent 插件在宿主机上访问 Langfuse 时使用
+LANGFUSE_BASE_URL=http://localhost:3000
+
+# Collector 容器访问 Langfuse 时使用
+LANGFUSE_OTEL_EXPORTER_BASE_URL=http://host.docker.internal:3000
 ```
 
-然后启动：
+常见 Collector URL：
 
-```bash
-pi
+```sh
+# Langfuse 在 Docker 宿主机上
+LANGFUSE_OTEL_EXPORTER_BASE_URL=http://host.docker.internal:3000
+
+# Langfuse 暴露在内网地址上
+LANGFUSE_OTEL_EXPORTER_BASE_URL=http://10.0.0.10:3000
+
+# Langfuse Cloud
+LANGFUSE_OTEL_EXPORTER_BASE_URL=https://cloud.langfuse.com
 ```
 
-没有配置 key 时，Pi 扩展会自动禁用，不影响 Pi 正常使用。
+### 3. 执行部署
 
-## OpenCode
-
-OpenCode 支持三种插件加载方式：
-
-- 本地插件目录：`.opencode/plugins/` 或 `~/.config/opencode/plugins/`，支持 `.js` 和 `.ts` 文件。
-- 配置文件：在 `opencode.json` 的 `plugin` 字段中声明 npm 包或本地路径。
-- 安装命令：使用 `opencode plugin <module>` 将插件写入配置。
-
-OpenCode 也提供安装命令：
-
-```bash
-opencode plugin <module>
+```sh
+cd /opt/agent-tracing/langfuse
+sudo ./deploy.sh
 ```
 
-别名：
+本地测试可跳过 profile 安装：
 
-```bash
-opencode plug <module>
+```sh
+LANGFUSE_INSTALL_PROFILE=0 ./deploy.sh
 ```
 
-加 `-g` / `--global` 会安装到全局配置，加 `-f` / `--force` 会替换已有版本。
+检查状态：
 
-### 本地插件目录
-
-项目级安装：
-
-```bash
-mkdir -p .opencode/plugins
-cp /path/to/plugin/langfuse/opencode-langfuse-tracker.js .opencode/plugins/langfuse.js
+```sh
+docker ps --filter name=agent-langfuse-otelcol
+docker logs agent-langfuse-otelcol --tail 80
 ```
 
-用户全局安装：
-
-```bash
-mkdir -p ~/.config/opencode/plugins
-cp /path/to/plugin/langfuse/opencode-langfuse-tracker.js ~/.config/opencode/plugins/langfuse.js
-```
-
-OpenCode 启动时会自动加载这些目录中的 `.js` 和 `.ts` 插件文件。
-
-### 配置文件方式
-
-也可以在 `opencode.json` 中声明本地插件路径：
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["./.opencode/plugins/langfuse.js"]
-}
-```
-
-路径会按声明它的配置文件位置解析。项目配置通常放在：
+期望看到：
 
 ```text
-opencode.json
+0.0.0.0:4318->4318/tcp
 ```
 
-用户全局配置通常放在：
+### 4. 新开终端验证
 
-```text
-~/.config/opencode/opencode.json
+新开一个 login shell，让 `/etc/profile.d/agent-langfuse.sh` 生效。
+
+检查环境变量：
+
+```sh
+env | grep '^LANGFUSE_OTEL_ENDPOINT_'
 ```
 
-### plugin 命令方式
+执行一次 agent 请求后，查看 Collector 日志：
 
-`opencode plugin <module>` 用于安装包式插件并更新配置。适用场景包括 npm 包，以及带有 `package.json` 插件入口声明的本地或远程插件包。
-
-本目录已经提供 package 形式：
-
-```text
-opencode-langfuse/
-  package.json
-  index.js
+```sh
+docker logs agent-langfuse-otelcol --since 5m | grep Traces
 ```
 
-项目级安装：
+## 本地开发
 
-```bash
-opencode plugin /path/to/plugin/langfuse/opencode-langfuse
+加载本地 profile：
+
+```sh
+source /path/to/agent-tracing/langfuse/setup-langfuse-profile-local.sh
 ```
 
-用户全局安装：
+使用 Docker Desktop 启动单端口 Collector：
 
-```bash
-opencode plugin -g /path/to/plugin/langfuse/opencode-langfuse
+```sh
+cd /path/to/agent-tracing/langfuse/otel-collector
+docker compose -f docker-compose.single-port.yaml --env-file .env.generated up -d
 ```
 
-替换已有配置：
+macOS 本地测试时，Langfuse 在 `localhost:3000`，使用：
 
-```bash
-opencode plugin -f /path/to/plugin/langfuse/opencode-langfuse
+```sh
+LANGFUSE_OTEL_EXPORTER_BASE_URL=http://host.docker.internal:3000
 ```
 
-安装 npm 包时使用包名：
+## 运维说明
 
-```bash
-opencode plugin <module>
+- 钩子设计为"失败放行"（fail open）。即使 Collector 不可用，智能体也应继续正常运行。
+- `LANGFUSE_OTEL_TIMEOUT_MS` 默认为 `200` 毫秒。
+- `LANGFUSE_OTEL_FALLBACK_INGESTION` 默认为 `0`。生产环境请保持关闭，以避免智能体钩子直接进行同步上传。
+- Claude Code 和 Codex 的官方钩子/通知载荷不直接暴露完整的模型/工具上下文，因此使用本地对话记录重建方式。
+- 当命名或解析逻辑变更时，已有的 Langfuse 记录不会被回填。
+
+## 验证命令
+
+验证 Collector 配置：
+
+```sh
+docker run --rm \
+  --env-file /opt/agent-tracing/langfuse/otel-collector/.env.generated \
+  -v /opt/agent-tracing/langfuse/otel-collector/collector-single-port.docker.yaml:/etc/otelcol/config.yaml:ro \
+  otel/opentelemetry-collector:latest \
+  validate --config /etc/otelcol/config.yaml
 ```
 
-例如：
+检查 JavaScript 钩子语法：
 
-```bash
-opencode plugin opencode-langfuse-tracker
+```sh
+node --check langfuse/claude-code-langfuse/scripts/langfuse-hook.mjs
+node --check langfuse/codex-langfuse/scripts/codex-notify-wrapper.mjs
+node --check langfuse/opencode-langfuse/index.js
+node --check langfuse/cline-langfuse-tracker.js
 ```
-
-全局安装：
-
-```bash
-opencode plugin -g opencode-langfuse-tracker
-```
-
-单个 `.js` / `.ts` 插件文件推荐使用“本地插件目录”或“配置文件方式”加载。
-
-### Langfuse 环境变量
-
-```bash
-export LANGFUSE_PUBLIC_KEY_OPENCODE=pk-lf-...
-export LANGFUSE_SECRET_KEY_OPENCODE=sk-lf-...
-export LANGFUSE_BASE_URL_OPENCODE=https://cloud.langfuse.com
-```
-
-缺少 `LANGFUSE_PUBLIC_KEY_OPENCODE` 或 `LANGFUSE_SECRET_KEY_OPENCODE` 时，插件会打印 warning 并禁用追踪。
-
-## Cline
-
-Cline CLI 支持插件安装命令：
-
-```bash
-cline plugin install <source>
-```
-
-别名：
-
-```bash
-cline plugin i <source>
-```
-
-`<source>` 可以是 npm 包、git 仓库、远程插件文件 URL 或本地插件路径。常用参数：
-
-```bash
-cline plugin install <source> --force
-cline plugin install <source> --cwd /path/to/project
-cline plugin install <source> --npm
-cline plugin install <source> --git
-```
-
-`--cwd <path>` 会安装到 `<path>/.cline/plugins`。不指定时使用当前上下文的默认 Cline 插件目录。
-
-### 本地安装
-
-安装本仓库里的 Cline tracker：
-
-```bash
-cline plugin install /path/to/plugin/langfuse/cline-langfuse-tracker.js
-```
-
-安装到指定项目：
-
-```bash
-cline plugin install /path/to/plugin/langfuse/cline-langfuse-tracker.js --cwd /path/to/project
-```
-
-如果要替换已安装版本：
-
-```bash
-cline plugin install /path/to/plugin/langfuse/cline-langfuse-tracker.js --force
-```
-
-Cline 也支持直接把插件文件放到 `.cline/plugins/` 或用户级插件目录，但推荐优先用 `cline plugin install`，方便 Cline 处理路径和依赖。
-
-### Langfuse 环境变量
-
-```bash
-export LANGFUSE_PUBLIC_KEY_CLINE=pk-lf-...
-export LANGFUSE_SECRET_KEY_CLINE=sk-lf-...
-export LANGFUSE_BASE_URL_CLINE=https://cloud.langfuse.com
-```
-
-缺少 `LANGFUSE_PUBLIC_KEY_CLINE` 或 `LANGFUSE_SECRET_KEY_CLINE` 时，插件会禁用追踪。启用成功后会记录 `enabled` 日志。
-
-### 配置后重启 Cline hub
-
-Cline CLI 会复用已经启动的本地 hub runtime。环境变量只会在进程启动时继承一次，所以如果先启动过 Cline hub，再配置 Langfuse 环境变量，插件和聊天里的工具进程可能仍然读不到新的 `LANGFUSE_*_CLINE` 变量。
-
-配置或更新 Langfuse 环境变量后，建议重启 Cline hub：
-
-```bash
-cline hub stop
-
-cline hub start
-```
-
-## Claude Code
-
-Claude Code 使用本目录的 local marketplace 安装：
-
-```bash
-claude plugin marketplace add /path/to/plugin/langfuse
-claude plugin install claude-code-langfuse@agent-langfuse
-```
-
-### Langfuse 环境变量
-
-```bash
-export LANGFUSE_PUBLIC_KEY_CLAUDECODE=pk-lf-...
-export LANGFUSE_SECRET_KEY_CLAUDECODE=sk-lf-...
-export LANGFUSE_BASEURL_CLAUDECODE=https://cloud.langfuse.com
-```
-
-当前 Claude Code tracker 基于 hooks 记录 `UserPromptSubmit`、`PreToolUse`、`PostToolUse`、`Stop`、`StopFailure` 和 `SessionEnd`。它记录 turn trace 和 tool span；模型 request/usage 是否可用取决于 Claude Code hook payload。
-
-## Codex
-
-Codex 使用本目录的 local marketplace：
-
-```bash
-codex plugin marketplace add /path/to/plugin/langfuse
-```
-
-当前 Codex CLI 提供 marketplace 管理命令，但没有非交互式 `codex plugin install <name>` 子命令。如果 marketplace policy 没有自动启用插件，请在 Codex 中打开 `/plugins`，选择 `codex-langfuse` 安装或启用。
-
-### Langfuse 环境变量
-
-```bash
-export LANGFUSE_PUBLIC_KEY_CODEX=pk-lf-...
-export LANGFUSE_SECRET_KEY_CODEX=sk-lf-...
-export LANGFUSE_BASEURL_CODEX=https://cloud.langfuse.com
-```
-
-当前 Codex tracker 基于 hooks 记录 `UserPromptSubmit`、`PreToolUse`、`PostToolUse`、`Stop` 和 `StopFailure`。它记录 turn trace 和 tool span；模型 request/usage 是否可用取决于 Codex hook payload。
-
-## 统一安装脚本
-
-`setup-langfuse.sh` 可以作为所有用户共享的登录初始化脚本使用。它会：
-
-- 导出 Pi / OpenCode / Cline / Claude Code / Codex 的 Langfuse 环境变量。
-- 只在交互式 shell 中执行插件安装。
-- 为每个用户分别写入 marker，避免重复安装。
-- 使用简单 lock，避免同一用户多个 shell 同时首次登录时并发安装。
-
-默认插件源路径是：
-
-```bash
-/NAS/Home/nt00342/code/plugin-langfuse
-```
-
-如需覆盖：
-
-```bash
-export LANGFUSE_PLUGIN_SRC=/path/to/plugin/langfuse
-source /path/to/plugin/langfuse/setup-langfuse.sh
-```
-
-全员共享时，可以在 `/etc/profile.d/agent-langfuse.sh` 中 source 它：
-
-```bash
-source /NAS/Home/nt00342/code/plugin-langfuse/setup-langfuse.sh
-```
-
-每个用户首次打开交互式 shell 时会自动安装：
-
-```text
-~/.pi/agent/.langfuse_installed
-~/.config/opencode/.langfuse_installed
-~/.cline/.langfuse_installed
-~/.claude/.langfuse_installed
-~/.codex/.langfuse_installed
-```
-
-如果插件源码更新，需要强制重装某个用户的插件，可以删除对应 marker 后重新登录，或手动执行对应安装命令。
-
-## 服务器多用户建议
-
-如果服务器上每个 Linux 用户都有自己的 agent 账号，建议各自维护自己的 agent 配置：
-
-```text
-~/.pi/agent/
-~/.config/opencode/
-~/.cline/
-```
-
-Langfuse 环境变量可以放到用户自己的 shell 配置：
-
-```bash
-~/.bashrc
-~/.zshrc
-```
-
-如果要全员共享 Langfuse 变量，可以放到：
-
-```bash
-/etc/profile.d/agent-langfuse.sh
-```
-
-示例：
-
-```bash
-export LANGFUSE_ENVIRONMENT=production
-export LANGFUSE_BASE_URL=https://cloud.langfuse.com
-export LANGFUSE_PUBLIC_KEY=pk-lf-...
-export LANGFUSE_SECRET_KEY=sk-lf-...
-```
-
-注意：共享 Langfuse key 通常没问题，但不要无意中共享 LLM 登录态、OAuth token 或 agent auth 文件。
-
-Pi 如果设置了：
-
-```bash
-export PI_CODING_AGENT_DIR=/opt/pi-agent
-```
-
-就不会再读取当前用户的 `~/.pi/agent` 作为全局配置，而是改读 `/opt/pi-agent`。这适合共享插件配置，但不适合共享个人 LLM 登录凭据，除非你明确希望所有用户共用同一套账号。

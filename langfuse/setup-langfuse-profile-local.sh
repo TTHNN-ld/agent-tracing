@@ -1,11 +1,11 @@
 # Langfuse setup for Pi / OpenCode / Cline / Claude Code / Codex.
 #
 # Local test usage:
-#   source /path/to/plugin-langfuse/langfuse/setup-langfuse-profile-local.sh
+#   source /path/to/agent-tracing/langfuse/setup-langfuse-profile-local.sh
 #
 # Server usage:
 #   cp this file /etc/profile.d/agent-langfuse.sh
-#   export LANGFUSE_PLUGIN_SRC=/path/to/plugin-langfuse/langfuse before sourcing,
+#   export LANGFUSE_PLUGIN_SRC=/path/to/agent-tracing/langfuse before sourcing,
 #   or edit the candidate paths below.
 
 # ---------- Langfuse endpoint and credentials -------------------
@@ -21,38 +21,42 @@ fi
 : "${LANGFUSE_OTEL_TIMEOUT_MS:=200}"
 : "${LANGFUSE_OTEL_FALLBACK_INGESTION:=0}"
 : "${LANGFUSE_OTEL_ENDPOINT_CLAUDECODE:=http://127.0.0.1:4318}"
-: "${LANGFUSE_OTEL_ENDPOINT_CODEX:=http://127.0.0.1:4319}"
+: "${LANGFUSE_OTEL_ENDPOINT_CODEX:=http://127.0.0.1:4318}"
+: "${LANGFUSE_OTEL_ENDPOINT_OPENCODE:=http://127.0.0.1:4318}"
+: "${LANGFUSE_OTEL_ENDPOINT_PI:=http://127.0.0.1:4318}"
+: "${LANGFUSE_OTEL_ENDPOINT_CLINE:=http://127.0.0.1:4318}"
 export LANGFUSE_ENVIRONMENT LANGFUSE_MAX_IO_CHARS LANGFUSE_FLUSH_INTERVAL_MS
 export LANGFUSE_TRANSPORT LANGFUSE_OTEL_TIMEOUT_MS LANGFUSE_OTEL_FALLBACK_INGESTION
 export LANGFUSE_OTEL_ENDPOINT_CLAUDECODE LANGFUSE_OTEL_ENDPOINT_CODEX
+export LANGFUSE_OTEL_ENDPOINT_OPENCODE LANGFUSE_OTEL_ENDPOINT_PI LANGFUSE_OTEL_ENDPOINT_CLINE
 
 # OpenCode
-: "${LANGFUSE_PUBLIC_KEY_OPENCODE:=pk-lf-bcc5e21a-d30d-48de-a0c3-51cd3de28089}"
-: "${LANGFUSE_SECRET_KEY_OPENCODE:=sk-lf-8622cddf-62c6-4d8d-bc8b-c8a13d99e12e}"
+: "${LANGFUSE_PUBLIC_KEY_OPENCODE:=}"
+: "${LANGFUSE_SECRET_KEY_OPENCODE:=}"
 : "${LANGFUSE_BASE_URL_OPENCODE:=http://localhost:3000}"
 export LANGFUSE_PUBLIC_KEY_OPENCODE LANGFUSE_SECRET_KEY_OPENCODE LANGFUSE_BASE_URL_OPENCODE
 
 # Pi
-: "${LANGFUSE_PUBLIC_KEY_PI:=pk-lf-243f1e2d-5276-4981-a5a9-58002dfc4c47}"
-: "${LANGFUSE_SECRET_KEY_PI:=sk-lf-aa1651bb-4c39-4fcd-99cb-4a95d9db170e}"
+: "${LANGFUSE_PUBLIC_KEY_PI:=}"
+: "${LANGFUSE_SECRET_KEY_PI:=}"
 : "${LANGFUSE_BASE_URL_PI:=http://localhost:3000}"
 export LANGFUSE_PUBLIC_KEY_PI LANGFUSE_SECRET_KEY_PI LANGFUSE_BASE_URL_PI
 
 # Cline
-: "${LANGFUSE_PUBLIC_KEY_CLINE:=pk-lf-b8678bc7-09c5-47b2-a120-6c46ea0dfcae}"
-: "${LANGFUSE_SECRET_KEY_CLINE:=sk-lf-af6b8b85-c487-4786-b91a-886c0369fc6d}"
+: "${LANGFUSE_PUBLIC_KEY_CLINE:=}"
+: "${LANGFUSE_SECRET_KEY_CLINE:=}"
 : "${LANGFUSE_BASE_URL_CLINE:=http://localhost:3000}"
 export LANGFUSE_PUBLIC_KEY_CLINE LANGFUSE_SECRET_KEY_CLINE LANGFUSE_BASE_URL_CLINE
 
 # Claude Code
-: "${LANGFUSE_PUBLIC_KEY_CLAUDECODE:=pk-lf-c5199b63-51c5-4a20-96c5-fb48e8e94990}"
-: "${LANGFUSE_SECRET_KEY_CLAUDECODE:=sk-lf-43e0fb13-0681-41b6-91e9-9b4c50111026}"
+: "${LANGFUSE_PUBLIC_KEY_CLAUDECODE:=}"
+: "${LANGFUSE_SECRET_KEY_CLAUDECODE:=}"
 : "${LANGFUSE_BASE_URL_CLAUDECODE:=http://localhost:3000}"
 export LANGFUSE_PUBLIC_KEY_CLAUDECODE LANGFUSE_SECRET_KEY_CLAUDECODE LANGFUSE_BASE_URL_CLAUDECODE
 
 # Codex
-: "${LANGFUSE_PUBLIC_KEY_CODEX:=pk-lf-d3b748b4-559b-49f5-92e7-c8203cc15500}"
-: "${LANGFUSE_SECRET_KEY_CODEX:=sk-lf-b7ad0460-0cc0-4e4d-8747-1a3f15aa6d82}"
+: "${LANGFUSE_PUBLIC_KEY_CODEX:=}"
+: "${LANGFUSE_SECRET_KEY_CODEX:=}"
 : "${LANGFUSE_BASE_URL_CODEX:=http://localhost:3000}"
 export LANGFUSE_PUBLIC_KEY_CODEX LANGFUSE_SECRET_KEY_CODEX LANGFUSE_BASE_URL_CODEX
 
@@ -70,20 +74,28 @@ _langfuse_basic_auth() {
 
 : "${LANGFUSE_AUTH_HEADER_CLAUDECODE:=$(_langfuse_basic_auth "$LANGFUSE_PUBLIC_KEY_CLAUDECODE" "$LANGFUSE_SECRET_KEY_CLAUDECODE")}"
 : "${LANGFUSE_AUTH_HEADER_CODEX:=$(_langfuse_basic_auth "$LANGFUSE_PUBLIC_KEY_CODEX" "$LANGFUSE_SECRET_KEY_CODEX")}"
+: "${LANGFUSE_AUTH_HEADER_OPENCODE:=$(_langfuse_basic_auth "$LANGFUSE_PUBLIC_KEY_OPENCODE" "$LANGFUSE_SECRET_KEY_OPENCODE")}"
+: "${LANGFUSE_AUTH_HEADER_PI:=$(_langfuse_basic_auth "$LANGFUSE_PUBLIC_KEY_PI" "$LANGFUSE_SECRET_KEY_PI")}"
+: "${LANGFUSE_AUTH_HEADER_CLINE:=$(_langfuse_basic_auth "$LANGFUSE_PUBLIC_KEY_CLINE" "$LANGFUSE_SECRET_KEY_CLINE")}"
 : "${LANGFUSE_OTEL_EXPORTER_ENDPOINT_CLAUDECODE:=${LANGFUSE_BASE_URL_CLAUDECODE%/}/api/public/otel}"
 : "${LANGFUSE_OTEL_EXPORTER_ENDPOINT_CODEX:=${LANGFUSE_BASE_URL_CODEX%/}/api/public/otel}"
+: "${LANGFUSE_OTEL_EXPORTER_ENDPOINT_OPENCODE:=${LANGFUSE_BASE_URL_OPENCODE%/}/api/public/otel}"
+: "${LANGFUSE_OTEL_EXPORTER_ENDPOINT_PI:=${LANGFUSE_BASE_URL_PI%/}/api/public/otel}"
+: "${LANGFUSE_OTEL_EXPORTER_ENDPOINT_CLINE:=${LANGFUSE_BASE_URL_CLINE%/}/api/public/otel}"
 : "${LANGFUSE_CODEX_NOTIFY_FORWARD:=[\"$HOME/.codex/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient\",\"turn-ended\"]}"
 export LANGFUSE_AUTH_HEADER_CLAUDECODE LANGFUSE_AUTH_HEADER_CODEX
+export LANGFUSE_AUTH_HEADER_OPENCODE LANGFUSE_AUTH_HEADER_PI LANGFUSE_AUTH_HEADER_CLINE
 export LANGFUSE_OTEL_EXPORTER_ENDPOINT_CLAUDECODE LANGFUSE_OTEL_EXPORTER_ENDPOINT_CODEX
+export LANGFUSE_OTEL_EXPORTER_ENDPOINT_OPENCODE LANGFUSE_OTEL_EXPORTER_ENDPOINT_PI LANGFUSE_OTEL_EXPORTER_ENDPOINT_CLINE
 export LANGFUSE_CODEX_NOTIFY_FORWARD
 
 # ---------- Plugin source ---------------------------------------
 
 if [ -z "${LANGFUSE_PLUGIN_SRC:-}" ]; then
     for _langfuse_candidate in \
-        "/Users/ld/work/ziguang/workCode/opensource/plugin-langfuse/langfuse" \
-        "/NAS/Home/nt00342/code/plugin-langfuse/langfuse" \
-        "/NAS/Home/nt00342/code/plugin-langfuse"
+        "/Users/ld/work/ziguang/workCode/opensource/agent-tracing/langfuse" \
+        "/NAS/Home/nt00342/code/agent-tracing/langfuse" \
+        "/NAS/Home/nt00342/code/agent-tracing/langfuse"
     do
         if [ -d "$_langfuse_candidate/codex-langfuse" ] && [ -d "$_langfuse_candidate/claude-code-langfuse" ]; then
             LANGFUSE_PLUGIN_SRC="$_langfuse_candidate"

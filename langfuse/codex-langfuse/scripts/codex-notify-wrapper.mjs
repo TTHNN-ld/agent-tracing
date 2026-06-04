@@ -335,7 +335,7 @@ async function emitTurn(turn) {
     agent: AGENT,
     serviceName: "agent-langfuse-codex",
   });
-  const endpoint = process.env.LANGFUSE_OTEL_ENDPOINT_CODEX || process.env.LANGFUSE_OTEL_ENDPOINT || "http://127.0.0.1:4319";
+  const endpoint = process.env.LANGFUSE_OTEL_ENDPOINT_CODEX || process.env.LANGFUSE_OTEL_ENDPOINT || "http://127.0.0.1:4318";
   const timeoutMs = Number(process.env.LANGFUSE_OTEL_TIMEOUT_MS || 200);
   return postOtlp(payload, endpoint, timeoutMs);
 }

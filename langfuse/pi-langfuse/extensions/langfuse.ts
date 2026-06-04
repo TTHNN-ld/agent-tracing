@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+// @ts-ignore - Pi loads this package as ESM at runtime.
+import { otlpPayloadFromEvents, postOtlp } from "../scripts/otel-utils.mjs";
 import type {
 	AgentMessage,
 	ExtensionAPI,
@@ -73,9 +75,6 @@ function clip(value: unknown): unknown {
 	};
 }
 
-function authHeader(publicKey: string, secretKey: string): string {
-	return `Basic ${Buffer.from(`${publicKey}:${secretKey}`).toString("base64")}`;
-}
 
 function userId(): string {
 	return process.env.LANGFUSE_USER_ID ?? process.env.USER ?? "unknown";
@@ -164,11 +163,8 @@ export default function langfuseTracker(pi: ExtensionAPI): void {
 
 	if (!publicKey || !secretKey) return;
 
-	const endpoint = `${baseUrl.replace(/\/$/, "")}/api/public/ingestion`;
-	const headers = {
-		authorization: authHeader(publicKey, secretKey),
-		"content-type": "application/json",
-	};
+	const endpoint = process.env.LANGFUSE_OTEL_ENDPOINT_PI ?? process.env.LANGFUSE_OTEL_ENDPOINT ?? "http://127.0.0.1:4318";
+	const timeoutMs = Number(process.env.LANGFUSE_OTEL_TIMEOUT_MS ?? 200);
 
 	const queue: QueuedEvent[] = [];
 	const toolToTurn = new Map<string, Turn>();
@@ -200,12 +196,12 @@ export default function langfuseTracker(pi: ExtensionAPI): void {
 		flushing = true;
 		const batch = queue.splice(0, queue.length);
 		try {
-			const response = await fetch(endpoint, {
-				method: "POST",
-				headers,
-				body: JSON.stringify({ batch }),
+			const payload = otlpPayloadFromEvents(batch, {
+				agent: "pi",
+				serviceName: "agent-langfuse-pi",
 			});
-			if (!response.ok && response.status !== 207) {
+			const ok = await postOtlp(payload, endpoint, timeoutMs);
+			if (!ok) {
 				queue.unshift(...batch);
 			}
 		} catch {
