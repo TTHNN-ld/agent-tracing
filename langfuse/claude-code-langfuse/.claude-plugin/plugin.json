@@ -1,0 +1,9 @@
+{
+  "name": "claude-code-langfuse",
+  "version": "0.2.0",
+  "description": "Claude Code hooks that send turn, tool, and stop events to Langfuse.",
+  "author": {
+    "name": "Agent Langfuse"
+  },
+  "license": "MIT"
+}

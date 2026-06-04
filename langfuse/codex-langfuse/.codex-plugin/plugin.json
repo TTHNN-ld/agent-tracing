@@ -1,0 +1,26 @@
+{
+  "name": "codex-langfuse",
+  "version": "0.2.1",
+  "description": "Codex hooks that send turn, tool, and stop events to Langfuse.",
+  "hooks": "./hooks.json",
+  "author": {
+    "name": "Agent Langfuse"
+  },
+  "license": "MIT",
+  "keywords": [
+    "langfuse",
+    "observability",
+    "hooks",
+    "codex"
+  ],
+  "interface": {
+    "displayName": "Codex Langfuse",
+    "shortDescription": "Record Codex sessions and tool calls in Langfuse",
+    "longDescription": "Records Codex prompt, tool, and stop hook events as Langfuse traces and spans.",
+    "developerName": "Agent Langfuse",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ]
+  }
+}

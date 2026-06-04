@@ -1,0 +1,59 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/codex-langfuse/scripts/langfuse-hook.mjs\" codex"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/codex-langfuse/scripts/langfuse-hook.mjs\" codex"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/codex-langfuse/scripts/langfuse-hook.mjs\" codex"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/codex-langfuse/scripts/langfuse-hook.mjs\" codex"
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/codex-langfuse/scripts/langfuse-hook.mjs\" codex"
+          }
+        ]
+      }
+    ]
+  }
+}

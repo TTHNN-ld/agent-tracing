@@ -1,0 +1,20 @@
+{
+  "name": "agent-langfuse",
+  "interface": {
+    "displayName": "Agent Langfuse"
+  },
+  "plugins": [
+    {
+      "name": "codex-langfuse",
+      "source": {
+        "source": "local",
+        "path": "./codex-langfuse"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

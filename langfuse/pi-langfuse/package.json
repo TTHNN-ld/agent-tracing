@@ -1,0 +1,15 @@
+{
+	"name": "pi-langfuse",
+	"version": "0.1.0",
+	"type": "module",
+	"private": true,
+	"description": "Pi extension that sends agent turns, LLM generations, and tool spans to Langfuse.",
+	"keywords": ["pi-package"],
+	"peerDependencies": {
+		"@earendil-works/pi-ai": "*",
+		"@earendil-works/pi-coding-agent": "*"
+	},
+	"pi": {
+		"extensions": ["./extensions"]
+	}
+}

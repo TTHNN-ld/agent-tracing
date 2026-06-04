@@ -1,0 +1,16 @@
+{
+  "name": "agent-langfuse",
+  "owner": {
+    "name": "Agent Langfuse"
+  },
+  "metadata": {
+    "description": "Langfuse observability plugins for coding agents."
+  },
+  "plugins": [
+    {
+      "name": "claude-code-langfuse",
+      "source": "./claude-code-langfuse",
+      "description": "Record Claude Code prompt, tool, and stop hook events in Langfuse."
+    }
+  ]
+}

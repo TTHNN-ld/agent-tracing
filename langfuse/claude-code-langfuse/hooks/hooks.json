@@ -1,0 +1,70 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/claude-code-langfuse/scripts/langfuse-hook.mjs\" claudecode"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/claude-code-langfuse/scripts/langfuse-hook.mjs\" claudecode"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/claude-code-langfuse/scripts/langfuse-hook.mjs\" claudecode"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/claude-code-langfuse/scripts/langfuse-hook.mjs\" claudecode"
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/claude-code-langfuse/scripts/langfuse-hook.mjs\" claudecode"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$LANGFUSE_PLUGIN_SRC/claude-code-langfuse/scripts/langfuse-hook.mjs\" claudecode"
+          }
+        ]
+      }
+    ]
+  }
+}

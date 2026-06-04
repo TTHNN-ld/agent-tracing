@@ -1,0 +1,15 @@
+{
+  "name": "opencode-langfuse",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "OpenCode plugin that sends turns, LLM generations, and tool spans to Langfuse.",
+  "keywords": ["opencode-plugin", "langfuse"],
+  "main": "./index.js",
+  "exports": {
+    "./server": "./index.js"
+  },
+  "engines": {
+    "opencode": "*"
+  }
+}
