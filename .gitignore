@@ -1,0 +1,11 @@
+.DS_Store
+*.log
+
+# Local environment files can contain Langfuse keys or other secrets.
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+coverage/
