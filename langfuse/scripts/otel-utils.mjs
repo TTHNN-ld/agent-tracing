@@ -172,7 +172,7 @@ export function otlpPayloadFromEvents(events, { agent, serviceName }) {
       }
       if (event.type === "trace-create") {
         const hookEventName = String(event.body?.metadata?.hookEventName ?? "").toLowerCase();
-        return event.body?.output !== undefined || hookEventName.includes("stop") || hookEventName.includes("error");
+        return event.body?.output !== undefined || event.body?.input !== undefined || hookEventName.includes("stop") || hookEventName.includes("error");
       }
       return event.type === "span-update" || event.type === "generation-create" || event.type === "generation-update";
     })

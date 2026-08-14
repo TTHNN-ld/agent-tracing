@@ -127,6 +127,7 @@ function readClaudeTranscript(payload) {
   if (!transcriptPath) return {};
 
   try {
+    const payloadSessionId = pick(payload, ["session_id", "sessionId", "conversation_id", "conversationId"]);
     const entries = readFileSync(transcriptPath, "utf8")
       .split(/\r?\n/)
       .filter(Boolean)
@@ -136,6 +137,16 @@ function readClaudeTranscript(payload) {
         } catch {
           return [];
         }
+      })
+      .filter((entry) => {
+        // Drop subagent/sidechain entries interleaved into the main transcript, and any
+        // entry that belongs to a different session, so the reconstructed turn stays clean.
+        if (entry?.isSidechain === true) return false;
+        if (payloadSessionId) {
+          const entrySession = entry?.sessionId ?? entry?.session_id;
+          if (entrySession && entrySession !== payloadSessionId) return false;
+        }
+        return true;
       });
 
     let latestUserIndex = -1;
@@ -279,12 +290,44 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function claudeTranscriptFlushed(transcriptPath) {
+  try {
+    const entries = readFileSync(transcriptPath, "utf8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .flatMap((line) => {
+        try {
+          return [JSON.parse(line)];
+        } catch {
+          return [];
+        }
+      });
+    let latestUserIndex = -1;
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      if (isClaudeHumanUser(entries[index])) {
+        latestUserIndex = index;
+        break;
+      }
+    }
+    if (latestUserIndex === -1) return true;
+    return entries.slice(latestUserIndex + 1).some((entry) => entry?.type === "assistant");
+  } catch {
+    return true;
+  }
+}
+
 async function waitForClaudeStopTranscript(payload) {
   if (AGENT !== "claudecode") return;
   const eventName = String(pick(payload, ["hook_event_name", "hookName", "eventName", "event", "type"]) ?? "").toLowerCase();
   if (!eventName.includes("stop") && !eventName.includes("sessionend")) return;
-  const delayMs = Number(process.env.LANGFUSE_CLAUDE_STOP_DELAY_MS ?? 750);
-  if (delayMs > 0) await sleep(delayMs);
+  const transcriptPath = pick(payload, ["transcript_path", "transcriptPath"]);
+  const timeoutMs = Number(process.env.LANGFUSE_CLAUDE_STOP_DELAY_MS ?? 750);
+  if (timeoutMs <= 0 || !transcriptPath) return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (claudeTranscriptFlushed(transcriptPath)) return;
+    await sleep(50);
+  }
 }
 
 async function ingest(events) {
@@ -485,6 +528,7 @@ function buildEvents(payload) {
       id: data.traceId,
       timestamp: now(),
       name: traceName(AGENT, data.prompt),
+      userId: process.env.LANGFUSE_USER_ID ?? process.env.USER ?? "unknown",
       sessionId: data.sessionId,
       input: clip(data.prompt),
       output: clip(data.output),
@@ -497,6 +541,7 @@ function buildEvents(payload) {
       id: data.traceId,
       timestamp: now(),
       name: traceName(AGENT, data.prompt),
+      userId: process.env.LANGFUSE_USER_ID ?? process.env.USER ?? "unknown",
       sessionId: data.sessionId,
       input: clip(data.prompt),
       output: clip(data.output),
